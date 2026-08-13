@@ -46,6 +46,19 @@ class Value:
     def __repr__(self):
         return "%s %s" % (self.value, self.unit)
 
+def value_or_none(item, unit):
+    """Build a Value, or None if StokerCloud isn't reporting this one.
+
+    The API sends null for values the controller isn't currently producing
+    (-wantedboilertemp has no setpoint while the boiler is idle), and omits
+    entries entirely on some models. Absent is not zero, so report it as
+    absent instead of raising from Decimal(None).
+    """
+    if item is None or item.get('value') is None:
+        return None
+    return Value(item['value'], unit)
+
+
 def get_from_list_by_key(lst, key, value):
     for itm in lst:
         if itm.get(key) == value:
@@ -80,15 +93,15 @@ class ControllerData:
 
     @property
     def boiler_temperature_current(self):
-        return Value(self.get_sub_item('frontdata', 'boilertemp')['value'], Unit.DEGREE)\
+        return value_or_none(self.get_sub_item('frontdata', 'boilertemp'), Unit.DEGREE)
 
     @property
     def boiler_temperature_requested(self):
-        return Value(self.get_sub_item('frontdata', '-wantedboilertemp')['value'], Unit.DEGREE)
+        return value_or_none(self.get_sub_item('frontdata', '-wantedboilertemp'), Unit.DEGREE)
 
     @property
     def boiler_kwh(self):
-        return Value(self.get_sub_item('boilerdata', '5')['value'], Unit.KWH)
+        return value_or_none(self.get_sub_item('boilerdata', '5'), Unit.KWH)
 
     @property
     def state(self):
@@ -96,16 +109,16 @@ class ControllerData:
 
     @property
     def hotwater_temperature_current(self):
-        return Value(self.get_sub_item('frontdata', 'dhw')['value'], Unit.DEGREE)
+        return value_or_none(self.get_sub_item('frontdata', 'dhw'), Unit.DEGREE)
 
     @property
     def hotwater_temperature_requested(self):
-        return Value(self.get_sub_item('frontdata', 'dhwwanted')['value'], Unit.DEGREE)
+        return value_or_none(self.get_sub_item('frontdata', 'dhwwanted'), Unit.DEGREE)
 
     @property
     def consumption_total(self):
-        return Value(self.get_sub_item('hopperdata', '4')['value'], Unit.KILO_GRAM)
+        return value_or_none(self.get_sub_item('hopperdata', '4'), Unit.KILO_GRAM)
     
     @property
     def consumption_day(self):
-        return Value(self.get_sub_item('hopperdata', '3')['value'], Unit.KILO_GRAM)
+        return value_or_none(self.get_sub_item('hopperdata', '3'), Unit.KILO_GRAM)

@@ -380,3 +380,28 @@ def test_controller_data_connected():
     test_data = '{"notconnected": 1}'
     with pytest.raises(NotConnectedException):
         ControllerData(json.loads(test_data))
+
+def test_null_and_missing_values():
+    """StokerCloud sends null for values the controller isn't producing."""
+    test_data = """
+    {
+        "frontdata": [
+            {"id": "boilertemp", "value": "18.6", "unit": "LNG_DEGREE"},
+            {"id": "-wantedboilertemp", "value": null, "unit": "LNG_DEGREE"}
+        ],
+        "hopperdata": [],
+        "miscdata": {"state": {"value": "state_9"}, "alarm": 0, "running": 0},
+        "notconnected": 0,
+        "serial": "12345"
+    }
+    """
+    cd = ControllerData(json.loads(test_data))
+
+    # present value still parses
+    assert cd.boiler_temperature_current == Value("18.6", Unit.DEGREE)
+    # null value reads as absent instead of raising TypeError from Decimal(None)
+    assert cd.boiler_temperature_requested is None
+    # entry missing from the payload entirely is absent too
+    assert cd.consumption_total is None
+    # unknown state code is absent rather than a KeyError
+    assert cd.state is None
