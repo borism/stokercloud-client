@@ -122,3 +122,14 @@ class ControllerData:
     @property
     def consumption_day(self):
         return value_or_none(self.get_sub_item('hopperdata', '3'), Unit.KILO_GRAM)
+
+    @property
+    def outside_temperature(self):
+        """Outside temperature as StokerCloud reports it.
+
+        Note this comes from the weather block, alongside city name, wind and
+        humidity — it is an online lookup for the installation's location, not
+        a sensor wired to the controller. The id is a JSON number here while
+        its siblings are strings, so it is looked up as an int.
+        """
+        return value_or_none(self.get_sub_item('weatherdata', 1), Unit.DEGREE)

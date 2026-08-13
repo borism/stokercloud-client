@@ -374,6 +374,7 @@ def test_controller_data():
     assert cd.boiler_temperature_requested == Value("62.0", Unit.DEGREE)
     assert cd.state == State.POWER
     assert cd.consumption_total == Value("1499", Unit.KILO_GRAM)
+    assert cd.outside_temperature == Value("0.8", Unit.DEGREE)
 
 
 def test_controller_data_connected():
@@ -390,6 +391,7 @@ def test_null_and_missing_values():
             {"id": "-wantedboilertemp", "value": null, "unit": "LNG_DEGREE"}
         ],
         "hopperdata": [],
+        "weatherdata": [],
         "miscdata": {"state": {"value": "state_9"}, "alarm": 0, "running": 0},
         "notconnected": 0,
         "serial": "12345"
@@ -405,3 +407,5 @@ def test_null_and_missing_values():
     assert cd.consumption_total is None
     # unknown state code is absent rather than a KeyError
     assert cd.state is None
+    # whole weatherdata block missing from the payload
+    assert cd.outside_temperature is None
