@@ -16,13 +16,17 @@ class TokenInvalid(Exception):
 class Client:
     BASE_URL = "http://www.stokercloud.dk/"
 
-    def __init__(self, name: str, password: str = None, cache_time_seconds: int = 10):
+    def __init__(self, name: str, password: str = None, cache_time_seconds: int = 10,
+                 chart_cache_time_seconds: int = 300):
         self.name = name
         self.password = password
         self.token = None
         self.state = None
         self.last_fetch = None
         self.cache_time_seconds = cache_time_seconds
+        self.cached_chart = None
+        self.last_chart_fetch = None
+        self.chart_cache_time_seconds = chart_cache_time_seconds
 
     def refresh_token(self):
         with request.urlopen(
@@ -41,7 +45,7 @@ class Client:
                 raise TokenInvalid()
             absolute_url = urljoin(
                 self.BASE_URL,
-                "%s?token=%s" % (url, self.token)
+                "%s%stoken=%s" % (url, '&' if '?' in url else '?', self.token)
             )
             logger.debug(absolute_url)
             with request.urlopen(absolute_url) as data:
@@ -58,3 +62,27 @@ class Client:
         if not self.last_fetch or (time.time() - self.last_fetch) > self.cache_time_seconds:
             self.update_controller_data()
         return ControllerData(self.cached_data)
+
+    def chart_values(self, hours: int = 1):
+        """Latest value of every chart series, keyed by series name.
+
+        Readings the controller publishes but controllerdata2 leaves out live
+        here — notably drift_exttemp, the external temperature sensor, as
+        opposed to the online weather lookup in the weatherdata block.
+
+        This endpoint returns every series over the whole window (~65 kB for
+        one hour, all 47 series) with no way to ask for one, so it is cached
+        much longer than controller data. Raise chart_cache_time_seconds if
+        the bandwidth matters more than freshness, or lower it if you are
+        charting something that moves fast.
+        """
+        if not self.last_chart_fetch or (time.time() - self.last_chart_fetch) > self.chart_cache_time_seconds:
+            self.cached_chart = self.make_request(
+                "v2/dataout2/getchartv2.php?hours=%d" % hours
+            )
+            self.last_chart_fetch = time.time()
+        return {
+            series['name']: series['data'][-1][1]
+            for series in self.cached_chart
+            if series.get('name') and series.get('data')
+        }

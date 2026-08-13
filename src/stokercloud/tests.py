@@ -409,3 +409,21 @@ def test_null_and_missing_values():
     assert cd.state is None
     # whole weatherdata block missing from the payload
     assert cd.outside_temperature is None
+
+
+def test_chart_values_takes_latest_point():
+    """Series are returned as [[timestamp, value], ...], newest last."""
+    from stokercloud.client import Client
+    import time
+
+    client = Client("someuser")
+    client.cached_chart = [
+        {"name": "drift_exttemp", "data": [[1786664029000, 12.1], [1786671168000, 13.7]]},
+        {"name": "drift_kedel_temp", "data": [[1786671168000, 18.7]]},
+        {"name": "drift_empty", "data": []},
+        {"data": [[1786671168000, 1]]},  # no name
+    ]
+    client.last_chart_fetch = time.time()  # inside the cache window, so no request
+
+    values = client.chart_values()
+    assert values == {"drift_exttemp": 13.7, "drift_kedel_temp": 18.7}
