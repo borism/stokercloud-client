@@ -375,6 +375,8 @@ def test_controller_data():
     assert cd.state == State.POWER
     assert cd.consumption_total == Value("1499", Unit.KILO_GRAM)
     assert cd.outside_temperature == Value("0.8", Unit.DEGREE)
+    assert cd.oxygen == Value("17.6", Unit.PERCENT)
+    assert cd.oxygen_requested == Value("20.9", Unit.PERCENT)
 
 
 def test_controller_data_connected():

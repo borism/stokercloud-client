@@ -124,6 +124,15 @@ class ControllerData:
         return value_or_none(self.get_sub_item('hopperdata', '3'), Unit.KILO_GRAM)
 
     @property
+    def oxygen(self):
+        """Measured flue oxygen. Also in the chart data as drift_oxygen."""
+        return value_or_none(self.get_sub_item('boilerdata', '12'), Unit.PERCENT)
+
+    @property
+    def oxygen_requested(self):
+        return value_or_none(self.get_sub_item('frontdata', 'refoxygen'), Unit.PERCENT)
+
+    @property
     def outside_temperature(self):
         """Outside temperature as StokerCloud reports it.
 
