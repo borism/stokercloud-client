@@ -123,6 +123,51 @@ class ControllerData:
     def consumption_day(self):
         return value_or_none(self.get_sub_item('hopperdata', '3'), Unit.KILO_GRAM)
 
+    def get_weathercomp(self, key):
+        """weathercomp entries are {'val': ..., 'unit': ...}, not the
+        {'id': ..., 'value': ...} shape the other blocks use."""
+        item = self.data.get('weathercomp', {}).get(key)
+        if item is None or item.get('val') is None:
+            return None
+        # These arrive as JSON floats where other blocks send strings, and
+        # Decimal(20.8) is 20.80000000000000071..., so go via str.
+        return Value(str(item['val']), Unit.DEGREE)
+
+    @property
+    def zone1_temperature_current(self):
+        """Zone 1 measured temperature ("Zone 1 T6" in the UI)."""
+        return self.get_weathercomp('zone1-actual')
+
+    @property
+    def zone1_temperature_requested(self):
+        """Zone 1 target flow temperature."""
+        return self.get_weathercomp('zone1-wanted')
+
+    @property
+    def zone1_temperature_calculated(self):
+        """Zone 1 weather-compensation reference.
+
+        Tracks the external temperature sensor closely, so it appears to be
+        the filtered outdoor value the compensation curve is evaluated at
+        rather than a flow temperature.
+        """
+        return self.get_weathercomp('zone1-calc')
+
+    @property
+    def substate(self):
+        """Finer-grained state than `state`, e.g. which ignition phase.
+
+        Empty string when the controller isn't reporting one, normalised to
+        None so callers don't have to special-case it.
+        """
+        return self.data['miscdata'].get('substate', {}).get('value') or None
+
+    @property
+    def substate_seconds(self):
+        """Seconds spent in the current substate. Useful for spotting a
+        controller stuck in one phase."""
+        return self.data['miscdata'].get('substatesecs', {}).get('value')
+
     @property
     def oxygen(self):
         """Measured flue oxygen. Also in the chart data as drift_oxygen."""

@@ -377,6 +377,13 @@ def test_controller_data():
     assert cd.outside_temperature == Value("0.8", Unit.DEGREE)
     assert cd.oxygen == Value("17.6", Unit.PERCENT)
     assert cd.oxygen_requested == Value("20.9", Unit.PERCENT)
+    assert cd.consumption_day == Value("27.7", Unit.KILO_GRAM)
+    # JSON floats here, so this also pins the str() conversion: a bare
+    # Decimal(0.3) would be 0.2999999999999999888977697537...
+    assert cd.zone1_temperature_current == Value("999.9", Unit.DEGREE)
+    assert cd.zone1_temperature_calculated == Value("0.3", Unit.DEGREE)
+    assert cd.substate is None  # empty string in the payload
+    assert cd.substate_seconds == 0
 
 
 def test_controller_data_connected():
@@ -411,6 +418,8 @@ def test_null_and_missing_values():
     assert cd.state is None
     # whole weatherdata block missing from the payload
     assert cd.outside_temperature is None
+    # no weathercomp block at all
+    assert cd.zone1_temperature_current is None
 
 
 def test_chart_values_takes_latest_point():
