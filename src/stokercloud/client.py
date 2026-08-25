@@ -8,6 +8,11 @@ from stokercloud.controller_data import ControllerData
 
 logger = logging.getLogger(__name__)
 
+# stokercloud.dk has been observed to accept a connection and then never
+# reply; urlopen has no timeout by default, which hung every polling thread
+# forever and starved HA's executor pool until nothing updated anymore.
+REQUEST_TIMEOUT_SECONDS = 15
+
 
 class TokenInvalid(Exception):
     pass
@@ -33,7 +38,8 @@ class Client:
                 urljoin(
                     self.BASE_URL,
                     'v2/dataout2/login.php?user=%s' % self.name
-                )
+                ),
+                timeout=REQUEST_TIMEOUT_SECONDS,
         ) as response:
             data = json.loads(response.read())
             self.token = data['token']  # actual token
@@ -48,7 +54,7 @@ class Client:
                 "%s%stoken=%s" % (url, '&' if '?' in url else '?', self.token)
             )
             logger.debug(absolute_url)
-            with request.urlopen(absolute_url) as data:
+            with request.urlopen(absolute_url, timeout=REQUEST_TIMEOUT_SECONDS) as data:
                 return json.load(data)
         except TokenInvalid:
             self.refresh_token()
