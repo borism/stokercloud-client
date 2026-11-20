@@ -422,6 +422,53 @@ def test_null_and_missing_values():
     assert cd.zone1_temperature_current is None
 
 
+def _outputs_data(leftoutput):
+    data = {"miscdata": {}, "notconnected": 0, "serial": "12345"}
+    if leftoutput is not ...:
+        data["leftoutput"] = leftoutput
+    return ControllerData(data)
+
+
+def test_outputs_on_off():
+    cd = _outputs_data({
+        "output-1": {"val": "ON", "unit": "", "image": "1-dhw.png"},
+        "output-2": {"val": "off", "unit": "", "image": "2-pump.png"},
+    })
+    assert cd.dhw_valve is PowerState.ON
+    assert cd.circulation_pump is PowerState.OFF
+
+
+def test_outputs_matched_by_image_then_key():
+    # image name wins over position
+    cd = _outputs_data({
+        "output-1": {"val": "OFF", "image": "1-pump.png"},
+        "output-2": {"val": "ON", "image": "2-dhw.png"},
+    })
+    assert cd.dhw_valve is PowerState.ON
+    assert cd.circulation_pump is PowerState.OFF
+    # no image: fall back to the fixed keys
+    cd = _outputs_data({"output-1": {"val": "ON"}, "output-2": {"val": "OFF"}})
+    assert cd.dhw_valve is PowerState.ON
+    assert cd.circulation_pump is PowerState.OFF
+
+
+def test_outputs_unknown_values():
+    for val in ("N/A", "disabled", None, ""):
+        cd = _outputs_data({
+            "output-1": {"val": val, "image": "1-dhw.png"},
+            "output-2": {"val": val, "image": "2-pump.png"},
+        })
+        assert cd.dhw_valve is None
+        assert cd.circulation_pump is None
+
+
+def test_outputs_missing():
+    for leftoutput in (..., None, {}, {"output-3": {"val": "%"}}, {"output-1": None}, {"output-1": {}}):
+        cd = _outputs_data(leftoutput)
+        assert cd.dhw_valve is None
+        assert cd.circulation_pump is None
+
+
 def test_chart_values_takes_latest_point():
     """Series are returned as [[timestamp, value], ...], newest last."""
     from stokercloud.client import Client
