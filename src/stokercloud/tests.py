@@ -472,10 +472,11 @@ def test_consumption_history_normal(monkeypatch):
 
     result = client.consumption_history("hours")
 
+    # labels are Copenhagen wall-clock (CET in November), so real UTC is label - 1 h
     assert result == [
-        (datetime.fromtimestamp(1700007200, tz=timezone.utc), 0.0),
-        (datetime.fromtimestamp(1700003600, tz=timezone.utc), 1.25),
-        (datetime.fromtimestamp(1700000000, tz=timezone.utc), 0.5),
+        (datetime.fromtimestamp(1700007200 - 3600, tz=timezone.utc), 0.0),
+        (datetime.fromtimestamp(1700003600 - 3600, tz=timezone.utc), 1.25),
+        (datetime.fromtimestamp(1700000000 - 3600, tz=timezone.utc), 0.5),
     ]
     assert urls == [client.BASE_URL + "v2/dataout2/getconsumption.php?hours=24&token=tok"]
 
@@ -520,4 +521,22 @@ def test_consumption_history_malformed_points(monkeypatch):
         [1e30, 1.0],               # timestamp out of range
     ]}]
     result = _consumption_client(monkeypatch, payload).consumption_history()
-    assert result == [(datetime.fromtimestamp(1700000000, tz=timezone.utc), 2.0)]
+    assert result == [(datetime.fromtimestamp(1700000000 - 3600, tz=timezone.utc), 2.0)]
+
+
+def test_consumption_history_timezone(monkeypatch):
+    """Labels are Copenhagen wall-clock encoded as UTC: -1 h in winter, -2 h in summer."""
+    from datetime import datetime, timezone
+
+    def label(*args):
+        return int(datetime(*args, tzinfo=timezone.utc).timestamp() * 1000)
+
+    payload = [{"label": "graph_consume", "data": [
+        [label(2026, 1, 15, 12), 1.0],  # CET, UTC+1
+        [label(2026, 7, 15, 12), 2.0],  # CEST, UTC+2 (assumed, unverified against real data)
+    ]}]
+    result = _consumption_client(monkeypatch, payload).consumption_history()
+    assert result == [
+        (datetime(2026, 7, 15, 10, tzinfo=timezone.utc), 2.0),
+        (datetime(2026, 1, 15, 11, tzinfo=timezone.utc), 1.0),
+    ]
