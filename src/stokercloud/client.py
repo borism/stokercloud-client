@@ -1,4 +1,7 @@
 import json
+import math
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from http.client import HTTPResponse
 from urllib import request
 from urllib.parse import urljoin
@@ -12,6 +15,15 @@ logger = logging.getLogger(__name__)
 # reply; urlopen has no timeout by default, which hung every polling thread
 # forever and starved HA's executor pool until nothing updated anymore.
 REQUEST_TIMEOUT_SECONDS = 15
+
+# getconsumption.php only accepts these window sizes per period.
+# StokerCloud's epoch-ms timestamps are not UTC: they are Danish wall-clock
+# time encoded as if it were UTC.
+# ponytail: inferred from a winter (CET, UTC+1) observation only; summer
+# (CEST, UTC+2) behaviour still needs verifying against real data.
+STOKERCLOUD_TZ = ZoneInfo("Europe/Copenhagen")
+
+CONSUMPTION_PERIODS = {"hours": 24, "days": 24, "months": 12, "years": 12}
 
 
 class TokenInvalid(Exception):
@@ -92,3 +104,47 @@ class Client:
             for series in self.cached_chart
             if series.get('name') and series.get('data')
         }
+
+    def consumption_history(self, period: str = "hours"):
+        """Pellet consumption history in kg, newest first.
+
+        ``period`` is ``hours`` (last 24), ``days`` (last 24), ``months``
+        (last 12) or ``years`` (last 12). Returns a list of
+        ``(bucket start as aware UTC datetime, kg)``; the raw timestamps are
+        Copenhagen wall-clock time (see ``STOKERCLOUD_TZ``) and are converted
+        to real UTC. An empty or unexpected
+        response, a missing ``graph_consume`` series and malformed points all
+        give an empty list / are skipped rather than raising. Network errors
+        still propagate from ``make_request``.
+
+        Adapted from ``async_get_consumption`` in vurrut/stokercloud-client
+        (MIT).
+        """
+        if period not in CONSUMPTION_PERIODS:
+            raise ValueError("Invalid period: %s" % period)
+        data = self.make_request(
+            "v2/dataout2/getconsumption.php?%s=%d" % (period, CONSUMPTION_PERIODS[period])
+        )
+        if not isinstance(data, list):
+            return []
+        series = next(
+            (s for s in data if isinstance(s, dict) and s.get("label") == "graph_consume"),
+            None,
+        )
+        points = series.get("data") if series else None
+        result = []
+        for point in points if isinstance(points, list) else []:
+            try:
+                ts, kg = point
+                kg = float(kg)
+                if not math.isfinite(kg):
+                    continue
+                wall_clock = datetime.fromtimestamp(ts / 1000, tz=timezone.utc)
+                result.append((
+                    wall_clock.replace(tzinfo=STOKERCLOUD_TZ).astimezone(timezone.utc),
+                    kg,
+                ))
+            except (TypeError, ValueError, OverflowError, OSError):
+                continue
+        result.sort(key=lambda p: p[0], reverse=True)
+        return result
