@@ -438,3 +438,86 @@ def test_chart_values_takes_latest_point():
 
     values = client.chart_values()
     assert values == {"drift_exttemp": 13.7, "drift_kedel_temp": 18.7}
+
+
+def _consumption_client(monkeypatch, payload, urls=None):
+    """Client whose HTTP layer returns ``payload`` (JSON-encoded) for every request."""
+    import io
+    from stokercloud import client as client_module
+
+    def fake_urlopen(url, timeout=None):
+        if urls is not None:
+            urls.append(url)
+        return io.BytesIO(json.dumps(payload).encode())
+
+    monkeypatch.setattr(client_module.request, "urlopen", fake_urlopen)
+    client = client_module.Client("example_user")
+    client.token = "tok"
+    return client
+
+
+def test_consumption_history_normal(monkeypatch):
+    from datetime import datetime, timezone
+
+    urls = []
+    payload = [
+        {"label": "other_series", "data": [[1700000000000, 99]]},
+        {"label": "graph_consume", "data": [
+            [1700000000000, 0.5],
+            [1700003600000, "1.25"],  # numeric strings are accepted
+            [1700007200000, 0],
+        ]},
+    ]
+    client = _consumption_client(monkeypatch, payload, urls)
+
+    result = client.consumption_history("hours")
+
+    assert result == [
+        (datetime.fromtimestamp(1700007200, tz=timezone.utc), 0.0),
+        (datetime.fromtimestamp(1700003600, tz=timezone.utc), 1.25),
+        (datetime.fromtimestamp(1700000000, tz=timezone.utc), 0.5),
+    ]
+    assert urls == [client.BASE_URL + "v2/dataout2/getconsumption.php?hours=24&token=tok"]
+
+
+def test_consumption_history_period_counts(monkeypatch):
+    urls = []
+    client = _consumption_client(monkeypatch, [], urls)
+    for period in ("hours", "days", "months", "years"):
+        client.consumption_history(period)
+    assert [u.split("?")[1].split("&")[0] for u in urls] == [
+        "hours=24", "days=24", "months=12", "years=12",
+    ]
+    with pytest.raises(ValueError):
+        client.consumption_history("weeks")
+
+
+@pytest.mark.parametrize("payload", [{}, [], None, "oops", [{"label": "graph_consume"}],
+                                     [{"label": "graph_consume", "data": None}],
+                                     [{"label": "graph_consume", "data": []}]])
+def test_consumption_history_empty(monkeypatch, payload):
+    assert _consumption_client(monkeypatch, payload).consumption_history() == []
+
+
+def test_consumption_history_missing_label(monkeypatch):
+    payload = [{"label": "something_else", "data": [[1700000000000, 1.0]]}, "junk", 3]
+    assert _consumption_client(monkeypatch, payload).consumption_history() == []
+
+
+def test_consumption_history_malformed_points(monkeypatch):
+    from datetime import datetime, timezone
+
+    payload = [{"label": "graph_consume", "data": [
+        [1700000000000, 2.0],      # good
+        [1700003600000],           # too short
+        [1700007200000, 1, 2],     # too long
+        [1700010800000, None],     # null value
+        [1700014400000, "abc"],    # non-numeric value
+        [1700018000000, "nan"],    # not finite
+        ["bad", 1.0],              # non-numeric timestamp
+        None,
+        "x",
+        [1e30, 1.0],               # timestamp out of range
+    ]}]
+    result = _consumption_client(monkeypatch, payload).consumption_history()
+    assert result == [(datetime.fromtimestamp(1700000000, tz=timezone.utc), 2.0)]
