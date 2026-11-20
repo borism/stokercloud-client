@@ -123,6 +123,33 @@ class ControllerData:
     def consumption_day(self):
         return value_or_none(self.get_sub_item('hopperdata', '3'), Unit.KILO_GRAM)
 
+    def get_output(self, image_hint, fallback_key):
+        """State of a `leftoutput` entry, as PowerState, or None if unknown.
+
+        Entries look like {'val': 'ON', 'unit': '', 'image': '1-dhw.png'}. The
+        image name says what the output drives, so match on that and fall back
+        to the fixed key. `val` can also be 'N/A' or 'disabled' (and the block
+        or entry can be absent); all of those are unknown, not OFF.
+        """
+        outputs = self.data.get('leftoutput') or {}
+        item = next(
+            (v for v in outputs.values()
+             if isinstance(v, dict) and image_hint in str(v.get('image') or '').lower()),
+            outputs.get(fallback_key),
+        )
+        if not isinstance(item, dict):
+            return None
+        return {'ON': PowerState.ON, 'OFF': PowerState.OFF}.get(str(item.get('val')).upper())
+
+    @property
+    def dhw_valve(self):
+        """Controller is driving the DHW diverter valve output."""
+        return self.get_output('dhw', 'output-1')
+
+    @property
+    def circulation_pump(self):
+        return self.get_output('pump', 'output-2')
+
     def get_weathercomp(self, key):
         """weathercomp entries are {'val': ..., 'unit': ...}, not the
         {'id': ..., 'value': ...} shape the other blocks use."""
