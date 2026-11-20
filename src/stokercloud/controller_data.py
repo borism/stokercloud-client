@@ -1,4 +1,5 @@
 import decimal
+import re
 from enum import Enum
 
 
@@ -123,18 +124,20 @@ class ControllerData:
     def consumption_day(self):
         return value_or_none(self.get_sub_item('hopperdata', '3'), Unit.KILO_GRAM)
 
-    def get_output(self, image_hint, fallback_key):
+    def get_output(self, image_name, fallback_key):
         """State of a `leftoutput` entry, as PowerState, or None if unknown.
 
         Entries look like {'val': 'ON', 'unit': '', 'image': '1-dhw.png'}. The
-        image name says what the output drives, so match on that and fall back
+        image name says what the output drives, so match it exactly (e.g.
+        '1-dhw.png'; '4-weatherpump.png' is a different output) and fall back
         to the fixed key. `val` can also be 'N/A' or 'disabled' (and the block
         or entry can be absent); all of those are unknown, not OFF.
         """
         outputs = self.data.get('leftoutput') or {}
+        pattern = re.compile(r'\d+-%s\.png' % image_name, re.IGNORECASE)
         item = next(
             (v for v in outputs.values()
-             if isinstance(v, dict) and image_hint in str(v.get('image') or '').lower()),
+             if isinstance(v, dict) and pattern.fullmatch(str(v.get('image') or ''))),
             outputs.get(fallback_key),
         )
         if not isinstance(item, dict):

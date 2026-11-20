@@ -452,6 +452,20 @@ def test_outputs_matched_by_image_then_key():
     assert cd.circulation_pump is PowerState.OFF
 
 
+def test_outputs_weather_outputs_are_not_dhw_or_pump():
+    weather = {
+        "output-3": {"val": "ON", "image": "3-weathervalve.png"},
+        "output-4": {"val": "ON", "image": "4-weatherpump.png"},
+    }
+    # output-2 absent and no real pump entry: unknown, not the weather pump
+    cd = _outputs_data(dict(weather, **{"output-1": {"val": "ON", "image": "1-dhw.png"}}))
+    assert cd.dhw_valve is PowerState.ON
+    assert cd.circulation_pump is None
+    # weather pump listed before the real pump (under another key): real one wins
+    cd = _outputs_data(dict(weather, **{"output-6": {"val": "OFF", "image": "6-pump.png"}}))
+    assert cd.circulation_pump is PowerState.OFF
+
+
 def test_outputs_unknown_values():
     for val in ("N/A", "disabled", None, ""):
         cd = _outputs_data({
